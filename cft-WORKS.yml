@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "ECS Fargate Service with Managed EBS Volume"
+
+Parameters:
+  ECSClusterName:
+    Type: String
+    Default: "DevCluster-III"
+  ECSServiceName:
+    Type: String
+    Default: "ebs-fargate-service-III"
+  SecurityGroupIDs:
+    Type: CommaDelimitedList
+    Default: "sg-xxx"
+  SubnetIDs:
+    Type: CommaDelimitedList
+    Default: "subnet-xxx,subnet-xxx,subnet-xxx"
+  VpcID:
+    Type: String
+    Default: "vpc-xxx"
+  EBSVolumeRoleArn:
+    Type: String
+    Description: "ARN of the IAM role for ECS to manage EBS volumes"
+    Default: "arn:aws:iam::891377060167:role/ebs-fargate-role"
+  ECSTaskExecutionRole:
+    Type: String
+    Description: "ARN of the ECS Task Execution Role"
+    Default: "arn:aws:iam::891377060167:role/ecsTaskExecutionRole"
+
+Resources:
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref ECSClusterName
+  
+
+  FargateTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: "ebs-fargate-III"
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      NetworkMode: "awsvpc"
+      RequiresCompatibilities:
+        - "FARGATE"
+      Cpu: "1024"
+      Memory: "3072"
+      Volumes:
+        - Name: "ebs-vol"
+          ConfiguredAtLaunch: true
+      ContainerDefinitions:
+        - Name: "ebs-demo-app"
+          Image: "public.ecr.aws/docker/library/python:3.9-slim"
+          Command:
+            - "sh"
+            - "-c"
+            - "echo \"Writing data to EBS...\" > /data/test.txt; cat /data/test.txt; while true; do sleep 30; done"
+          PortMappings: []
+          Essential: true
+          Environment: []
+          MountPoints:
+            - SourceVolume: "ebs-vol"
+              ContainerPath: "/data"
+              ReadOnly: false
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              awslogs-group: "/ecs/ebs-fargate"
+              awslogs-region: "eu-west-1"
+              awslogs-stream-prefix: "ecs"
+      EphemeralStorage:
+        SizeInGiB: 30
+
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSClusterName
+      CapacityProviderStrategy:
+        - CapacityProvider: "FARGATE"
+          Base: 1
+          Weight: 1
+      TaskDefinition: !Ref FargateTaskDefinition
+      ServiceName: !Ref ECSServiceName
+      SchedulingStrategy: "REPLICA"
+      DesiredCount: 1
+      HealthCheckGracePeriodSeconds: 5
+      AvailabilityZoneRebalancing: "ENABLED"
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: "ENABLED"
+          SecurityGroups: !Ref SecurityGroupIDs
+          Subnets: !Ref SubnetIDs
+      PlatformVersion: "LATEST"
+      DeploymentConfiguration:
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: "ECS"
+      ServiceConnectConfiguration:
+        Enabled: false
+      Tags: []
+      EnableECSManagedTags: true
+      VolumeConfigurations:
+        - Name: "ebs-vol"
+          ManagedEBSVolume:
+            RoleArn: !Ref EBSVolumeRoleArn
+            VolumeType: "gp3"
+            Iops: 3000
+            SizeInGiB: "1"
+            Encrypted: false
+            FilesystemType: "ext4"
+
+Outputs:
+  ClusterName:
+    Description: "The cluster used to create the service."
+    Value: !Ref ECSClusterName
+  ECSService:
+    Description: "The created service."
+    Value: !Ref ECSService

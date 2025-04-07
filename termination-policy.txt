@@ -1,0 +1,7 @@
+The Termination policy determines whether the volume is deleted when the task is stopped. 
+A termination policy is only used for standalone tasks and isn't supported on tasks that are a part of a service. 
+By default, Amazon EBS volumes attached to standalone tasks are deleted when the task is stopped. 
+You can clear this setting to preserve volumes upon a task stopping.
+
+For services, this option is read-only and cannot be configured during service creation or update. 
+Volumes attached to tasks managed by a service are not preserved and will always be deleted upon the task stopping.
